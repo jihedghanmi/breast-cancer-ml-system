@@ -45,6 +45,30 @@ breast-cancer-ml-system/
 ├── .gitignore
 ├── requirements.txt
 └── README.md
+```
+
+---
+
+## 5. How to Run Locally
+
+1. **Create and activate a virtual environment:**
+   ```bash
+   python -m venv .venv
+   # Windows (PowerShell): .\.venv\Scripts\Activate.ps1
+   # macOS/Linux: source .venv/bin/activate
+   ```
+2. **Install dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. **Verify data loading & stratified split:**
+   ```bash
+   python -m src.data
+   ```
+4. **Verify leakage-free preprocessing pipeline:**
+   ```bash
+   python -m src.preprocessing
+   ```
 
 ---
 
