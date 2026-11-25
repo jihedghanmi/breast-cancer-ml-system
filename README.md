@@ -2,7 +2,7 @@
 
 End-to-end machine learning classification system predicting malignant vs. benign breast tumors from Fine Needle Aspirate (FNA) cell nuclei measurements using the UCI Wisconsin Breast Cancer Diagnostic dataset (569 samples, 30 numeric features).
 
-Built with a production-first engineering workflow: explicit clinical risk framing, leakage-free `scikit-learn` preprocessing pipelines, cross-validated model selection, threshold safety tuning, model explainability, and a deployable inference service.
+Built with a production-first engineering workflow: explicit clinical risk framing, leakage-free `scikit-learn` preprocessing pipelines, cross-validated model selection, threshold safety optimization, SHAP explainability, and a deployable inference service.
 
 ---
 
@@ -32,7 +32,7 @@ To prevent data leakage during both training and live inference:
 
 ---
 
-## 4. Modeling & Evaluation Results (`src/train.py`)
+## 4. Modeling & Cross-Validation Results (`src/train.py`)
 
 ### 5-Fold Stratified Cross-Validation Benchmark (`X_train` only)
 | Model | Recall | Precision | F1 | ROC-AUC |
@@ -43,16 +43,39 @@ To prevent data leakage during both training and live inference:
 
 * **Key Insight:** On 455 clean, continuous numeric samples, regularized `LogisticRegression` outperformed tree ensembles across every metric.
 * **Hyperparameter Tuning (`C` in `[0.01, 0.1, 1.0, 10.0, 100.0]`):** `C=0.01` underfit (`0.8647` Recall), `C=100.0` showed overfitting (`0.9485` Precision, `0.9914` ROC-AUC), and **`C=1.0`** achieved the strongest overall balance (`0.9529` Recall, `0.9640` F1, `0.9958` ROC-AUC).
-
-### Final Held-Out Test Evaluation (`X_test`, 114 unseen patients, default `0.50` threshold)
-* **Recall (Malignant):** `0.9286` (`39 / 42` malignant tumors caught; **`3` False Negatives**)
-* **Precision (Malignant):** `0.9750` (`39 / 40` flagged cases malignant; **`1` False Positive**)
-* **F1-Score (Malignant):** `0.9512` | **Accuracy:** `0.9649` | **ROC-AUC:** `0.9960`
-* **Artifact Saved:** Full fitted `Pipeline` (imputer + scaler + classifier) exported to `models/model.joblib`.
+* **Artifact Exported:** Full fitted `Pipeline` saved to `models/model.joblib`.
 
 ---
 
-## 5. Repository Structure
+## 5. Clinical Threshold Tuning & SHAP Explainability
+
+### Decision Threshold Optimization (`src/evaluate.py`)
+At the default `0.50` probability cutoff, `X_test` (`114` patients) had `0.9286` Recall (`3` missed malignant tumors). To avoid overfitting the cutoff to `X_test`, thresholds were evaluated using **5-fold out-of-fold CV probabilities (`cross_val_predict`) on `X_train` only**:
+
+| Threshold | CV Recall | CV Precision | CV F1 | Missed Cancers (FN) | False Alarms (FP) |
+| :---: | :---: | :---: | :---: | :---: | :---: |
+| `0.50` (Default) | 0.9529 | 0.9759 | 0.9643 | 8 | 4 |
+| `0.40` | 0.9647 | 0.9647 | 0.9647 | 6 | 6 |
+| **`0.30` (Selected)** | **0.9765** | **0.9540** | **0.9651** | **4** | **8** |
+| `0.20` | 0.9824 | 0.9227 | 0.9516 | 3 | 14 |
+| `0.15` | 0.9882 | 0.9032 | 0.9438 | 2 | 18 |
+
+* **Threshold Selection (`0.30`):** Cuts missed cancers in half on CV (`8 -> 4`) while maintaining >95% Precision (`95.40%`) and achieving peak F1 (`0.9651`).
+* **Held-Out `X_test` Improvement (`0.50` -> `0.30`):**
+  * **Recall (Malignant):** `0.9286` -> **`0.9762`** *(False Negatives reduced from **3 to 1**)*
+  * **Precision (Malignant):** `0.9750` -> **`0.9762`** *(False Positives stayed at **1**)*
+  * **Accuracy:** `0.9649` -> **`0.9825`** | **Test ROC-AUC:** `0.9960`
+
+### Model Explainability (`src/explain.py`)
+Uses `shap.LinearExplainer` on scaled features (`preprocessor.transform`) to provide both:
+* **Local Patient Explanations:** Quantifies how each of the 30 cell measurements pushed an individual patient's risk score higher (`+`) or lower (`-`) so clinicians can audit every prediction.
+* **Global Feature Importance:** Visualized across the test cohort below:
+
+![SHAP Summary Plot](reports/shap_summary.png)
+
+---
+
+## 6. Repository Structure
 ```text
 breast-cancer-ml-system/
 ├── app/                   # Inference API / UI (planned in Phase 6)
@@ -60,11 +83,15 @@ breast-cancer-ml-system/
 │   └── model.joblib       # Trained leakage-free sklearn Pipeline
 ├── notebooks/
 │   └── 01_eda.ipynb       # Exploratory Data Analysis & correlation heatmap
+├── reports/
+│   └── shap_summary.png   # Global SHAP feature impact summary
 ├── src/
 │   ├── __init__.py
 │   ├── data.py            # Target remapping & stratified train/test split
 │   ├── preprocessing.py   # Leakage-free ColumnTransformer blueprint
-│   └── train.py           # CV benchmarking, tuning, test evaluation & export
+│   ├── train.py           # CV benchmarking, tuning, test evaluation & export
+│   ├── evaluate.py        # Out-of-fold threshold tuning & held-out verification
+│   └── explain.py         # Local & global SHAP explainability
 ├── .gitignore
 ├── requirements.txt
 └── README.md
@@ -72,7 +99,7 @@ breast-cancer-ml-system/
 
 ---
 
-## 6. How to Run Locally
+## 7. How to Run Locally
 
 1. **Create and activate a virtual environment:**
    ```bash
@@ -84,25 +111,21 @@ breast-cancer-ml-system/
    ```bash
    pip install -r requirements.txt
    ```
-3. **Verify data loading & stratified split:**
+3. **Run modules step-by-step:**
    ```bash
    python -m src.data
-   ```
-4. **Verify leakage-free preprocessing pipeline:**
-   ```bash
    python -m src.preprocessing
-   ```
-5. **Run model benchmarking, tuning, evaluation & save pipeline:**
-   ```bash
    python -m src.train
+   python -m src.evaluate
+   python -m src.explain
    ```
 
 ---
 
-## 7. Project Roadmap
+## 8. Project Roadmap
 - [x] **Phase 1:** Problem Framing & Clinical Metric Selection
 - [x] **Phase 2:** Exploratory Data Analysis & Multicollinearity Analysis
 - [x] **Phase 3:** Leakage-Free Preprocessing Pipeline (`data.py` & `preprocessing.py`)
 - [x] **Phase 4:** Baseline vs. Tree Ensemble Modeling (`train.py`)
-- [ ] **Phase 5:** Threshold Tuning & SHAP Explainability
+- [x] **Phase 5:** Threshold Tuning & SHAP Explainability (`evaluate.py` & `explain.py`)
 - [ ] **Phase 6:** Inference Service (`app/`), Unit Tests & Packaging
