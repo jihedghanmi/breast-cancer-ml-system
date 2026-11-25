@@ -2,7 +2,7 @@
 
 End-to-end machine learning classification system predicting malignant vs. benign breast tumors from Fine Needle Aspirate (FNA) cell nuclei measurements using the UCI Wisconsin Breast Cancer Diagnostic dataset (569 samples, 30 numeric features).
 
-Built with a production-first engineering workflow: explicit clinical risk framing, leakage-free `scikit-learn` preprocessing pipelines, cross-validated model selection, threshold safety optimization, SHAP explainability, and a deployable inference service.
+Built with a production-first engineering workflow: explicit clinical risk framing, leakage-free `scikit-learn` preprocessing pipelines, cross-validated model selection, clinical threshold safety optimization, local & global SHAP explainability, an interactive Streamlit decision-support app, unit tests, and Docker containerization.
 
 ---
 
@@ -75,10 +75,17 @@ Uses `shap.LinearExplainer` on scaled features (`preprocessor.transform`) to pro
 
 ---
 
-## 6. Repository Structure
+## 6. Clinical Decision-Support App (`app/streamlit_app.py`)
+* **UI-Free Inference Layer (`src/predict.py`):** Decouples model loading, `0.30` safety thresholding, and SHAP computation from the web interface for clean testing and maintainability.
+* **Interactive Streamlit Dashboard (`app/streamlit_app.py`):** Allows clinicians to load test patient presets or edit all 30 cell measurements across organized `Mean`, `Error`, and `Worst` tabs, adjust the safety threshold, and inspect local SHAP risk-driver bar charts alongside a clinical disclaimer.
+
+---
+
+## 7. Repository Structure
 ```text
 breast-cancer-ml-system/
-├── app/                   # Inference API / UI (planned in Phase 6)
+├── app/
+│   └── streamlit_app.py   # Interactive clinical Streamlit dashboard
 ├── models/
 │   └── model.joblib       # Trained leakage-free sklearn Pipeline
 ├── notebooks/
@@ -91,15 +98,21 @@ breast-cancer-ml-system/
 │   ├── preprocessing.py   # Leakage-free ColumnTransformer blueprint
 │   ├── train.py           # CV benchmarking, tuning, test evaluation & export
 │   ├── evaluate.py        # Out-of-fold threshold tuning & held-out verification
-│   └── explain.py         # Local & global SHAP explainability
+│   ├── explain.py         # Local & global SHAP explainability
+│   └── predict.py         # Reusable inference & explanation API
+├── tests/
+│   ├── __init__.py
+│   └── test_pipeline.py   # Pytest suite (data, leakage/NaN guard, inference contract)
+├── .dockerignore
 ├── .gitignore
+├── Dockerfile
 ├── requirements.txt
 └── README.md
 ```
 
 ---
 
-## 7. How to Run Locally
+## 8. How to Run Locally
 
 1. **Create and activate a virtual environment:**
    ```bash
@@ -111,21 +124,35 @@ breast-cancer-ml-system/
    ```bash
    pip install -r requirements.txt
    ```
-3. **Run modules step-by-step:**
+3. **Run the ML pipeline modules:**
    ```bash
    python -m src.data
    python -m src.preprocessing
    python -m src.train
    python -m src.evaluate
    python -m src.explain
+   python -m src.predict
+   ```
+4. **Run unit tests:**
+   ```bash
+   pytest -v
+   ```
+5. **Launch the Streamlit dashboard:**
+   ```bash
+   streamlit run app/streamlit_app.py
+   ```
+6. **Optional — Run with Docker:**
+   ```bash
+   docker build -t breast-cancer-ml .
+   docker run -p 8501:8501 breast-cancer-ml
    ```
 
 ---
 
-## 8. Project Roadmap
+## 9. Project Roadmap
 - [x] **Phase 1:** Problem Framing & Clinical Metric Selection
 - [x] **Phase 2:** Exploratory Data Analysis & Multicollinearity Analysis
 - [x] **Phase 3:** Leakage-Free Preprocessing Pipeline (`data.py` & `preprocessing.py`)
 - [x] **Phase 4:** Baseline vs. Tree Ensemble Modeling (`train.py`)
 - [x] **Phase 5:** Threshold Tuning & SHAP Explainability (`evaluate.py` & `explain.py`)
-- [ ] **Phase 6:** Inference Service (`app/`), Unit Tests & Packaging
+- [x] **Phase 6:** Inference Service (`predict.py` & `streamlit_app.py`), Unit Tests (`pytest`), Docker & Documentation
