@@ -12,7 +12,10 @@ if str(ROOT_DIR) not in sys.path:
 from src.data import load_data, split_data
 from src.predict import DEFAULT_THRESHOLD, load_inference_artifacts, predict_patient
 
-st.set_page_config(page_title="Breast Cancer Diagnostic Aid", layout="wide")
+st.set_page_config(
+    page_title="Breast Cancer Benchmark Classifier (Educational Demo)",
+    layout="wide",
+)
 
 
 @st.cache_resource
@@ -30,37 +33,51 @@ def get_sample_patients():
 pipe, explainer = get_artifacts()
 X_test, y_test = get_sample_patients()
 
-st.title("Breast Cancer Diagnostic Decision-Support System")
+st.title("Breast Cancer Benchmark Classification Demo")
 st.caption(
-    "Logistic Regression pipeline with clinical threshold optimization and SHAP explainability."
+    "Educational machine learning exercise evaluated on the static UCI Wisconsin Breast Cancer Diagnostic benchmark dataset."
+)
+
+st.warning(
+    "**Educational & Privacy Disclaimer:** This application is an unvalidated machine learning portfolio exercise built strictly for educational demonstration. "
+    "Use built-in benchmark samples or synthetic numeric inputs only — **do not enter or upload real personal or patient medical data**. "
+    "This software is not a medical device and must never be used for medical diagnosis, treatment, or clinical decision-making."
 )
 
 # Sidebar controls
-st.sidebar.header("Patient & Safety Settings")
+st.sidebar.header("Benchmark Sample & Threshold")
+st.sidebar.info(
+    "Privacy Notice: Use benchmark samples or synthetic numbers only. Do not input real personal or patient medical data."
+)
+
 sample_idx = st.sidebar.number_input(
-    "Load Test Patient Sample (0 - 113)",
+    "Load Benchmark Test Sample (0 - 113)",
     min_value=0,
     max_value=len(X_test) - 1,
     value=0,
     step=1,
 )
-true_label = "Malignant (1)" if y_test.iloc[sample_idx] == 1 else "Benign (0)"
-st.sidebar.write(f"**True Test Diagnosis:** {true_label}")
+true_label = (
+    "Positive Class: Malignant (1)"
+    if y_test.iloc[sample_idx] == 1
+    else "Negative Class: Benign (0)"
+)
+st.sidebar.write(f"**Benchmark Ground-Truth Label:** {true_label}")
 
 threshold = st.sidebar.slider(
-    "Clinical Safety Threshold",
+    "Classification Probability Threshold",
     min_value=0.05,
     max_value=0.95,
     value=DEFAULT_THRESHOLD,
     step=0.05,
-    help="Lower thresholds prioritize Recall (fewer missed cancers).",
+    help="Lower cutoffs increase positive-class Recall and lower Precision on the benchmark.",
 )
 
-# Pre-fill 30 cell measurements from selected sample
+# Pre-fill 30 benchmark numeric features from selected sample
 default_row = X_test.iloc[sample_idx]
 inputs = {}
 
-st.subheader("Cell Nuclei Measurements (Editable)")
+st.subheader("Benchmark Feature Inputs (Sample or Synthetic Values Only)")
 tab_mean, tab_error, tab_worst = st.tabs(
     ["Mean Features", "Error (SE) Features", "Worst Features"]
 )
@@ -83,38 +100,40 @@ for tab, cols in feature_groups:
                 key=f"{sample_idx}_{feature}",
             )
 
-# Preserve exact training column order before predicting
+# Preserve exact training column order before running inference
 patient_df = pd.DataFrame([inputs])[X_test.columns.tolist()]
 result = predict_patient(patient_df, pipe, explainer, threshold=threshold, top_n=8)
 
-# Prediction Summary
+# Model Output Summary
 st.divider()
-st.subheader("Diagnostic Assessment")
+st.subheader("Model Output Summary (Static Benchmark Pipeline)")
 
 col1, col2, col3 = st.columns(3)
-col1.metric("Prediction", result["label"])
-col2.metric("Malignant Probability", f"{result['malignant_probability']:.2%}")
+col1.metric("Predicted Class", result["label"])
+col2.metric("Positive-Class Probability", f"{result['malignant_probability']:.2%}")
 col3.metric("Active Threshold", f"{result['threshold']:.2f}")
 
 if result["prediction"] == 1:
-    st.error(
-        "High-risk pattern detected (exceeds clinical safety threshold). Recommend confirmatory follow-up."
+    st.warning(
+        "Model output: Positive class (1) — predicted probability meets or exceeds the active threshold for these input values."
     )
 else:
     st.success(
-        "Low-risk pattern detected (below clinical safety threshold)."
+        "Model output: Negative class (0) — predicted probability is below the active threshold for these input values."
     )
 
-# SHAP Local Explanation
-st.subheader("Why Did the Model Predict This? (Local SHAP Drivers)")
+# Local SHAP Feature Attribution
+st.subheader("Local SHAP Feature Attribution (Model Interpretability)")
 factors = result["top_factors"].iloc[::-1]
 colors = ["#d62728" if val > 0 else "#1f77b4" for val in factors["shap_impact"]]
 
 fig, ax = plt.subplots(figsize=(8, 4))
 ax.barh(factors["feature"], factors["shap_impact"], color=colors)
 ax.axvline(0, color="black", linewidth=0.8)
-ax.set_xlabel("SHAP Impact (+ pushes toward Malignant, - pushes toward Benign)")
-ax.set_title("Top Feature Contributions for This Patient")
+ax.set_xlabel(
+    "SHAP Impact (+ pushes positive-class score up, - pushes score down)"
+)
+ax.set_title("Top Feature Contributions for Selected Input")
 plt.tight_layout()
 
 col_chart, col_table = st.columns([3, 2])
@@ -125,6 +144,6 @@ with col_chart:
 with col_table:
     st.dataframe(result["top_factors"], use_container_width=True, hide_index=True)
 
-st.info(
-    "Disclaimer: Portfolio ML decision-support prototype on the UCI Wisconsin dataset. Not a certified medical device."
+st.caption(
+    "Provided strictly 'as-is' for educational demonstration on a static public benchmark dataset. Not clinically validated; never use for medical decisions or with real patient data."
 )
