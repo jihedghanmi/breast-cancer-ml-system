@@ -85,7 +85,7 @@ Uses `shap.LinearExplainer` on scaled features (`preprocessor.transform`) to com
 
 ## 7. Repository Structure
 ```text
-breast-cancer-ml-system/
+breast-cancer-ml-classifier/
 ├── app/
 │   └── streamlit_app.py   # Interactive Streamlit demo UI
 ├── models/
